@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 4182"
+    "start": "python3 -m http.server 4182",
+    "test": "node qa/moving.test.mjs"
   }
 }
