@@ -1,5 +1,5 @@
-import {T,box,cyl,group,mat,avatar,makeCart,plant,fridge,couch,textSprite} from './art.js?v=painted4';
-import {CARGO} from './engine.js?v=3';
+import {T,box,cyl,group,mat,avatar,makeCart,plant,fridge,couch,textSprite} from './art.js?v=weather5';
+import {CARGO} from './engine.js?v=4';
 export function makeCargo(parent,id){return id===0?plant(parent,0,0,0,1.1):id===1?fridge(parent):couch(parent);}
 export function makePersonalityCart(parent,order){const cart=makeCart(parent);const heights=[1.2,1.48,.94];let base=.72;const reserve=group(cart.cargo,0,0,0);for(const side of [-1,1]){const g=group(reserve,side*.4,.31,0);box(g,.73,.62,.78,side<0?0xe5ba7b:0x8cb6ac);box(g,.14,.63,.8,0xffe6af);box(g,.36,.18,.02,0xfff0c9,.13,.38,.401);}cart.reserve=reserve;for(const id of [...order].reverse()){cart.items[id].position.set(id===0?-.08:0,base,0);cart.items[id].userData.baseY=base;base+=heights[id]+.04;}
  const f=cart.items[1],door=group(f,-.39,0,.34);f.updateWorldMatrix(true,true);for(const child of [f.children[1],f.children[3]])if(child&&child!==door)door.attach(child);cart.door=door;cart.leaves=cart.items[0].children.filter((_,i)=>i>=2);cart.cushions=cart.items[2].children.slice(4,6);for(const w of cart.wheels){box(w,.32,.025,.035,0xabc7cc,0,.087,0);box(w,.035,.025,.32,0xabc7cc,0,.088,0);}return cart;}

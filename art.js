@@ -30,29 +30,35 @@ function paintBands(original){
  const mid=hslColor(h,s<.18?s+.07:s+.07,Math.max(.2,l-.025));
  return {sun,mid,shade:hslColor(sh,ss,sl),cast:hslColor(sh+.035,ss+.05,sl-.055)};
 }
-const toonKey=new T.Vector3(-18,20,14).normalize();
+const toonKey=new T.Vector3(-18,20,14).normalize(),weatherTint=new T.Color(1,1,1),weatherShade=new T.Color(1,1,1),weatherContrast={value:1};
+export function setPaintWeather(tint,shade,direction,contrast){weatherTint.copy(tint);weatherShade.copy(shade);toonKey.copy(direction).normalize();weatherContrast.value=contrast;}
+
 export function mat(color){
  if(!palettes.has(color)){
   const bands=paintBands(color),m=new T.MeshToonMaterial({color:PAINT.get(color)??color,gradientMap:ramp});
   m.onBeforeCompile=shader=>{
-   Object.assign(shader.uniforms,{toonSun:{value:bands.sun},toonMid:{value:bands.mid},toonShade:{value:bands.shade},toonCast:{value:bands.cast},toonKey:{value:toonKey}});
+   Object.assign(shader.uniforms,{toonSun:{value:bands.sun},toonMid:{value:bands.mid},toonShade:{value:bands.shade},toonCast:{value:bands.cast},toonKey:{value:toonKey},weatherTint:{value:weatherTint},weatherShade:{value:weatherShade},weatherContrast});
    shader.fragmentShader=shader.fragmentShader.replace('#include <shadowmap_pars_fragment>',`#include <shadowmap_pars_fragment>
     #include <shadowmask_pars_fragment>
     uniform vec3 toonSun;
     uniform vec3 toonMid;
     uniform vec3 toonShade;
     uniform vec3 toonCast;
-    uniform vec3 toonKey;`);
+    uniform vec3 toonKey;
+    uniform vec3 weatherTint;
+    uniform vec3 weatherShade;
+    uniform float weatherContrast;`);
    shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`
     vec3 paintedNormal=normalize(inverseTransformDirection(normal,viewMatrix));
     float paintedNdotL=dot(paintedNormal,toonKey);
     vec3 painted=mix(toonShade,toonMid,step(0.08,paintedNdotL));
     painted=mix(painted,toonSun,step(0.62,paintedNdotL));
     float paintedOcclusion=1.0-smoothstep(0.44,0.58,getShadowMask());
-    outgoingLight=mix(painted,toonCast,paintedOcclusion*0.98)+totalEmissiveRadiance;
+    painted=mix(painted*weatherTint,painted*weatherShade,1.0-step(0.08,paintedNdotL));
+    outgoingLight=mix(painted,toonCast*weatherShade,paintedOcclusion*0.98*weatherContrast)+totalEmissiveRadiance;
     #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey=()=> 'blox-painted-toon-v4';palettes.set(color,m);
+  m.customProgramCacheKey=()=> 'blox-painted-toon-weather-v5';palettes.set(color,m);
  }
  return palettes.get(color);
 }
@@ -79,12 +85,12 @@ export function couch(parent){const g=group(parent);box(g,1.65,.28,.88,0x7eac83,
 export function fridge(parent){const g=group(parent);box(g,.85,1.45,.7,0xf3ead1,0,.73,0);box(g,.79,.79,.08,0xe8ddc7,0,.52,.39);box(g,.79,.48,.08,0xfbf4df,0,1.19,.39);box(g,.055,.32,.07,0xa99e83,.29,.69,.45);inkGroup(g);return g;}
 export function makeCart(parent){const root=group(parent),deck=group(root,0,.5,0);box(deck,1.9,.18,1.5,0xd99a63);box(deck,1.95,.13,1.55,0xf2cb92,0,.1,0);const wheels=[];for(const x of [-1.02,1.02])for(const z of [-.48,.48]){const w=cyl(root,.25,.15,0x46665d,x,.25,z);w.rotation.z=Math.PI/2;wheels.push(w);}box(root,.08,.85,.08,0x6b8b77,-.7,.83,-1.05);box(root,.08,.85,.08,0x6b8b77,.7,.83,-1.05);box(root,1.5,.08,.08,0x507463,0,1.23,-1.05);const cargo=group(deck,0,.18,0);const sofa=couch(cargo);const refrigerator=fridge(cargo);refrigerator.position.set(.1,.86,0);const pot=plant(cargo,-.12,2.35,0,1.25);inkGroup(root);return {root,deck,cargo,wheels,items:[pot,refrigerator,sofa]};}
 export class World{
- constructor(canvas){this.canvas=canvas;this.renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false});this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFSoftShadowMap;this.renderer.outputColorSpace=T.SRGBColorSpace;this.renderer.toneMapping=T.NoToneMapping;this.renderer.toneMappingExposure=1.05;this.renderer.setClearColor(0xc4e0d5);this.scene=new T.Scene();this.scene.background=new T.Color(0xc4e0d5);this.scene.fog=new T.Fog(0xc4e0d5,50,125);this.camera=new T.OrthographicCamera(-10,10,12,-12,.1,160);this.camera.position.set(16,23,28);this.look=new T.Vector3();this.hemi=new T.HemisphereLight(0xf7fff1,0x718d9c,1.0);this.scene.add(this.hemi);this.sun=new T.DirectionalLight(0xffefcf,1.8);this.sun.position.set(-18,20,14);this.sun.castShadow=true;this.sun.shadow.mapSize.set(2048,2048);Object.assign(this.sun.shadow.camera,{left:-23,right:23,top:23,bottom:-23,near:.5,far:85});this.sun.shadow.bias=-.0005;this.sun.shadow.normalBias=.035;this.scene.add(this.sun,this.sun.target);this.sceneRoot=new T.Group();this.scene.add(this.sceneRoot);this.fx=new T.Group();this.scene.add(this.fx);this.particles=[];this.shake=0;this.resize();}
+ constructor(canvas){this.canvas=canvas;this.renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false});this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFSoftShadowMap;this.renderer.outputColorSpace=T.SRGBColorSpace;this.renderer.toneMapping=T.NoToneMapping;this.renderer.toneMappingExposure=1.05;this.renderer.setClearColor(0xc4e0d5);this.scene=new T.Scene();this.scene.background=new T.Color(0xc4e0d5);this.scene.fog=new T.Fog(0xc4e0d5,50,125);this.camera=new T.OrthographicCamera(-10,10,12,-12,.1,160);this.camera.position.set(16,23,28);this.look=new T.Vector3();this.hemi=new T.HemisphereLight(0xf7fff1,0x718d9c,1.0);this.scene.add(this.hemi);this.sunOffset=new T.Vector3(-18,20,14);this.sun=new T.DirectionalLight(0xffefcf,1.8);this.sun.position.set(-18,20,14);this.sun.castShadow=true;this.sun.shadow.mapSize.set(2048,2048);Object.assign(this.sun.shadow.camera,{left:-23,right:23,top:23,bottom:-23,near:.5,far:85});this.sun.shadow.bias=-.0005;this.sun.shadow.normalBias=.035;this.scene.add(this.sun,this.sun.target);this.sceneRoot=new T.Group();this.scene.add(this.sceneRoot);this.fx=new T.Group();this.scene.add(this.fx);this.particles=[];this.shake=0;this.resize();}
  resize(){const {width,height}=this.canvas.getBoundingClientRect();this.renderer.setSize(width,height,false);const mobile=innerWidth<=900||(innerHeight<=500&&innerWidth<=1050)||(matchMedia('(pointer: coarse)').matches&&innerWidth<=1200);const ratio=Math.min(devicePixelRatio,mobile?1.25:1.7);if(this.renderer.getPixelRatio()!==ratio)this.renderer.setPixelRatio(ratio);const shadowSize=mobile?1024:2048;if(this.sun.shadow.mapSize.x!==shadowSize){this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.mapSize.set(shadowSize,shadowSize);}const aspect=width/height,h=mobile&&aspect>1.3?12:Math.max(15.5,12/aspect);this.camera.left=-h*aspect/2;this.camera.right=h*aspect/2;this.camera.top=h/2;this.camera.bottom=-h/2;this.camera.updateProjectionMatrix();}
  clear(){for(const p of this.particles)this.fx.remove(p.mesh);this.particles=[];while(this.sceneRoot.children.length){const a=this.sceneRoot.children.pop();a.parent=null;a.traverse(n=>{if(n.isSprite){n.material.map?.dispose();n.material.dispose();}});}this.shake=0;}
  burst(x,y,z,color=0xeac16c,count=14){for(let i=0;i<count;i++){const mesh=box(this.fx,.1+Math.random()*.09,.1,.1,color,x,y,z);mesh.castShadow=false;this.particles.push({mesh,vx:(Math.random()-.5)*5,vy:2+Math.random()*4,vz:(Math.random()-.5)*5,life:.6+Math.random()*.4});}}
  update(dt){for(let i=this.particles.length-1;i>=0;i--){const p=this.particles[i];p.life-=dt;p.vy-=10*dt;p.mesh.position.x+=p.vx*dt;p.mesh.position.y+=p.vy*dt;p.mesh.position.z+=p.vz*dt;p.mesh.rotation.x+=dt*3;p.mesh.rotation.z+=dt*4;p.mesh.scale.multiplyScalar(Math.max(.8,1-dt*.5));if(p.life<=0){this.fx.remove(p.mesh);this.particles.splice(i,1);}}this.shake=Math.max(0,this.shake-dt*1.8);}
- follow(x,y,z,dt,mode='stretch',snap=false){const target=new T.Vector3(x,y+1,z-(mode==='stretch'?3.2:2.5));this.look.lerp(target,snap?1:1-Math.exp(-dt*5));this.camera.position.copy(this.look).add(new T.Vector3(13,19,23));if(this.shake){this.camera.position.x+=Math.sin(performance.now()*.07)*this.shake*.13;this.camera.position.y+=Math.cos(performance.now()*.08)*this.shake*.1;}this.camera.lookAt(this.look);this.sun.position.set(this.look.x-18,20+this.look.y,this.look.z+14);this.sun.target.position.copy(this.look);this.sun.target.updateMatrixWorld();}
+ follow(x,y,z,dt,mode='stretch',snap=false){const target=new T.Vector3(x,y+1,z-(mode==='stretch'?3.2:2.5));this.look.lerp(target,snap?1:1-Math.exp(-dt*5));this.camera.position.copy(this.look).add(new T.Vector3(13,19,23));if(this.shake){this.camera.position.x+=Math.sin(performance.now()*.07)*this.shake*.13;this.camera.position.y+=Math.cos(performance.now()*.08)*this.shake*.1;}this.camera.lookAt(this.look);this.sun.position.copy(this.look).add(this.sunOffset);this.sun.target.position.copy(this.look);this.sun.target.updateMatrixWorld();}
  render(){this.renderer.render(this.scene,this.camera);}
  project(x,y,z){const p=new T.Vector3(x,y,z).project(this.camera);return {x:(p.x*.5+.5)*this.canvas.clientWidth,y:(-.5*p.y+.5)*this.canvas.clientHeight};}
 }
